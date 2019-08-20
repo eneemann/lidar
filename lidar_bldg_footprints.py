@@ -12,8 +12,7 @@ Created on Fri Aug 16 15:08:08 2019
 import os
 import time
 import arcpy
-import tempfile
-import math
+import timeit
 
 # Start timer and print start time in UTC
 start_time = time.time()
@@ -30,11 +29,11 @@ basename = 'test'  # basename for output files
 # final_lasd = 'small_lidar_dataset'  # output LAS dataset
 
 # First pass, create a las dataset
-my_lasd = 'small_lidar.lasd'
-# arcpy.management.CreateLasDataset(in_las, my_lasd)
+lasd = os.path.join(lidar_dir, 'small_lidar.lasd')
+arcpy.management.CreateLasDataset(in_las, lasd)
 
-lasd = my_lasd
 dem = os.path.join(lidar_dir, 'small_dem.tif')
+dsm = os.path.join(lidar_dir, 'small_dsm.tif')
 footprint = os.path.join(lidar_dir, 'small_footprints.shp')
 
 # try:
@@ -55,7 +54,7 @@ arcpy.ddd.ClassifyLasOverlap(lasd, sampling)
 print("Classifying ground points ...")
 arcpy.ddd.ClassifyLasGround(lasd)
 
-# Filter for ground points
+# Filter for ground points into lasd layer
 print("Filtering to ground points and generating DEM ...")
 arcpy.management.MakeLasDatasetLayer(lasd, 'ground', class_code=[2])
 
@@ -64,20 +63,37 @@ arcpy.management.MakeLasDatasetLayer(lasd, 'ground', class_code=[2])
 #                                     'BINNING NEAREST NATURAL_NEIGHBOR',
 #                                     sampling_type='CELLSIZE',
 #                                     sampling_value=desc.pointSpacing)
-arcpy.conversion.LasDatasetToRaster(lasd, dem, "ELEVATION",
+arcpy.conversion.LasDatasetToRaster('ground', dem, "ELEVATION",
+                                    "BINNING NEAREST NATURAL_NEIGHBOR", "FLOAT",
+                                    "CELLSIZE", 0.5, 1)
+
+# Filter for non-ground points into lasd layer
+classes = [0, 1, 3, 4, 5, 6]
+print("Filtering to non-ground points and generating DSM ...")
+arcpy.management.MakeLasDatasetLayer(lasd, 'surface', class_code=classes)
+
+# Generate DSM
+# arcpy.conversion.LasDatasetToRaster('ground', dsm, 'ELEVATION',
+#                                     'BINNING NEAREST NATURAL_NEIGHBOR',
+#                                     sampling_type='CELLSIZE',
+#                                     sampling_value=desc.pointSpacing)
+arcpy.conversion.LasDatasetToRaster('surface', dsm, "ELEVATION",
                                     "BINNING NEAREST NATURAL_NEIGHBOR", "FLOAT",
                                     "CELLSIZE", 0.5, 1)
 
 # Classify noise points
 print("Classifying noise points ...")
-arcpy.ddd.ClassifyLasNoise(lasd, method='ISOLATION', edit_las='CLASSIFY',
+arcpy.ddd.ClassifyLasNoise(lasd, method='RELATIVE_HEIGHT', edit_las='CLASSIFY',
                            withheld='WITHHELD', ground=dem,
-                           low_z='-2 feet', high_z='300 feet',
-                           max_neighbors=ptSpacing, step_width=ptSpacing,
-                           step_height='10 feet')
+                           low_z='-2 feet', high_z='200 feet')
+
 # Classify buildings
+section_time = time.time()
 print("Classifying building points ...")
-arcpy.ddd.ClassifyLasBuilding(lasd, '9 feet', '100 Square Feet')
+#arcpy.ddd.ClassifyLasBuilding(lasd, '9 feet', '100 Square Feet')
+#arcpy.ddd.ClassifyLasBuilding(lasd, '3 Meters', '9 Meters')
+arcpy.ddd.ClassifyLasBuilding(lasd, "3 Meters", "9 SquareMeters", "COMPUTE_STATS")
+print("Time elapsed: {:.2f}s".format(time.time() - section_time))
 
 #Classify vegetation
 print("Classifying vegetation by height ...")
@@ -87,9 +103,11 @@ arcpy.ddd.ClassifyLasByHeight(lasd, 'GROUND', [5, 20, 50],
 # Filter LAS dataset for building points
 print("Filtering to building points and exporting to raster ...")
 lasd_layer = 'building points'
+
 arcpy.management.MakeLasDatasetLayer(lasd, lasd_layer, class_code=[6])
 # Export raster from lidar using only building points
 temp_raster = 'in_memory/bldg_raster'
+
 arcpy.management.LasPointStatsAsRaster(lasd_layer, temp_raster,
                                        'PREDOMINANT_CLASS', 'CELLSIZE', 2.5)
 
@@ -100,8 +118,7 @@ arcpy.conversion.RasterToPolygon(temp_raster, temp_footprint)
 
 # Regularize building footprints
 print("Regularizing building footprints ...")
-arcpy.ddd.RegularizeBuildingFootprint(temp_footprint, footprint,
-                                      method='RIGHT_ANGLES')
+arcpy.ddd.RegularizeBuildingFootprint(temp_footprint, footprint, 'RIGHT_ANGLES', 2, 1, 0.15)
 
 # except arcpy.ExecuteError:
 print(arcpy.GetMessages())
