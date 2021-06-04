@@ -20,7 +20,25 @@ print("The script start time is {}".format(readable_start))
 today = time.strftime("%Y%m%d")
 
 
-lidar_dir = r"C:\Users\eneemann\Desktop\Kanab Lidar"
+#lidar_dir = r"C:\Users\eneemann\Desktop\Kanab Lidar"
+#os.chdir(lidar_dir)
+#
+#filenumber = 0
+#dir_list = os.listdir(lidar_dir)
+#total = len(dir_list)
+#for filename in dir_list:
+#    filenumber += 1
+#    print(f"Starting on file {filenumber} of {total}")
+#    base = os.path.splitext(filename)[0]
+#    command = f"pdal translate {base}.laz {base}.las"
+#    print(command)
+#    subprocess.check_call(command)
+#    print(f"Done with file {filenumber}, moving on to next file ...")
+    
+    
+    
+    
+lidar_dir = r"C:\Users\eneemann\Desktop\Bountiful Lidar"
 os.chdir(lidar_dir)
 
 filenumber = 0
@@ -30,10 +48,14 @@ for filename in dir_list:
     filenumber += 1
     print(f"Starting on file {filenumber} of {total}")
     base = os.path.splitext(filename)[0]
-    command = f"pdal translate {base}.laz {base}.las"
+    command = f"gdal_translate -of GTiff {base}.img {base}.tif"
     print(command)
     subprocess.check_call(command)
     print(f"Done with file {filenumber}, moving on to next file ...")
+    
+    
+    
+
     
 print("Script shutting down ...")
 # Stop timer and print end time in UTC
